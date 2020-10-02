@@ -8,15 +8,6 @@ import cocos.euclid as eu
 from math import radians, cos, sin
 
 
-#Action
-class Move(cocos.actions.Move):
-    def step(self, dt):
-        super().step(dt)
-        self.vel_x = (keyboard[key.RIGHT] - keyboard[key.LEFT]) * 500
-        self.vel_y = (keyboard[key.UP] - keyboard[key.DOWN]) * 500
-        self.target.velocity = (self.vel_x , self.vel_y)
-        scroller.set_focus(self.target.x, self.target.y)
-
 #Ship(Xwing)
 class Ship(cocos.sprite.Sprite):
     def __init__(self):
