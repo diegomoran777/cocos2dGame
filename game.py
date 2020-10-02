@@ -5,6 +5,7 @@ from pyglet.window import key
 from cocos.actions import *
 import cocos.collision_model as cm
 import cocos.euclid as eu
+from math import radians, cos, sin
 
 
 #Action
@@ -24,7 +25,6 @@ class Ship(cocos.sprite.Sprite):
         self.position = 50, 50
         self.velocity = (0, 0)
         self.cshape = cm.AARectShape(eu.Vector2(*self.position), self.width/2, self.height/2)
-        self.do(Move())
 
     def update_(self):
         self.cshape.center = eu.Vector2(*self.position)
@@ -91,7 +91,7 @@ class BackgroundLayer(cocos.layer.ScrollableLayer):
         self.anim = pyglet.image.Animation.from_image_sequence(img_grid[9:], 0.2, loop=False)
 
         #Sprites
-        self.laser = Laser()
+        self.lasers = []
         self.space = Space()
         self.ship = Ship()
         self.enemy_ship_one = Enemy_ship_one()
@@ -108,48 +108,76 @@ class BackgroundLayer(cocos.layer.ScrollableLayer):
         self.add(self.enemy_ship_one)
         self.add(self.enemy_ship_two)
 
+    def make_laser_remove_func(self, for_laser):
+        def remove_laser():
+            if for_laser in self.lasers:
+                self.lasers.remove(for_laser)
+                self.remove(for_laser)
+        return remove_laser
+
+    def vector_for_angle(self, angle, length=2000):
+        t = radians(angle)
+        return eu.Vector2(cos(t) * length, -sin(t) * length)
+
     #Event
     def on_key_release(self, symbol, modifiers):
-        self.laser = Laser()
-        self.laser._set_position(self.ship.position)
-
         if symbol == key.SPACE:
-            self.laser.do(MoveTo((2000, self.ship._get_y()), 1))
-            self.add(self.laser)
+            laser = Laser()
+            laser._set_position(self.ship.position + self.vector_for_angle(self.ship.rotation, self.ship.width))
+            laser.rotation = self.ship.rotation
+            self.lasers.append(laser)
+            laser.do(MoveTo(self.vector_for_angle(self.ship.rotation) + self.ship.position, 1) + CallFunc(self.make_laser_remove_func(laser)))
+            self.add(laser)
+        self.ship.actions.clear()
     
     def on_key_press(self, symbol, modifiers):
+        STEP = 50
+        DURATION = 0.1
+
         if symbol == key.UP:
-            self.ship.do(RotateTo(270, 0.1))
-        if symbol == key.DOWN:
-            self.ship.do(RotateTo(90, 0.1))
-        if symbol == key.LEFT:
-            self.ship.do(RotateTo(180, 0.1))
-        if symbol == key.RIGHT:
-            self.ship.do(RotateTo(0, 0.1))
-        if symbol == key.C:
-            self.ship.do(RotateBy(360, 0.2))
+            if self.ship.rotation != 270:
+                self.ship.do(RotateTo(270, DURATION))
+            self.ship.do(Repeat(cocos.actions.MoveBy((0, STEP), DURATION)))
+        elif symbol == key.DOWN:
+            if self.ship.rotation != 90:
+                self.ship.do(RotateTo(90, DURATION))
+            self.ship.do(Repeat(cocos.actions.MoveBy((0, -STEP), DURATION)))
+        elif symbol == key.LEFT:
+            if self.ship.rotation != 180:
+                self.ship.do(RotateTo(180, DURATION))
+            self.ship.do(Repeat(cocos.actions.MoveBy((-STEP, 0), DURATION)))
+        elif symbol == key.RIGHT:
+            if self.ship.rotation != 0:
+                self.ship.do(RotateTo(0, DURATION))
+            self.ship.do(Repeat(cocos.actions.MoveBy((STEP, 0), DURATION)))
+        elif symbol == key.C:
+            self.ship.do(RotateBy(360, DURATION))
 
 
 
     #Event update collide
     def update(self, dt):
-        self.laser.update_()
+        explosion = cocos.sprite.Sprite(self.anim)
+
         self.enemy_ship_one.update_()
         self.enemy_ship_two.update_()
         self.ship.update_()
-        explosion = cocos.sprite.Sprite(self.anim)
+        for laser in self.lasers:
+            laser.update_()
+            if laser.cshape.overlaps(self.enemy_ship_one.cshape):
+                explosion.position = self.enemy_ship_one._get_position()
+                explosion.do(FadeOut(0.30))
+                laser.do(CallFunc(self.make_laser_remove_func(laser)))
+                self.add(explosion)
 
-        if self.laser.cshape.overlaps(self.enemy_ship_one.cshape):
-            explosion.position = self.enemy_ship_one._get_position()
-            explosion.do(FadeOut(0.30))
-            self.laser.do(FadeOut(0.01))
-            self.add(explosion)
+            if laser.cshape.overlaps(self.enemy_ship_two.cshape):
+                explosion.position = self.enemy_ship_two._get_position()
+                explosion.do(FadeOut(0.30))
+                laser.do(CallFunc(self.make_laser_remove_func(laser)))
+                self.add(explosion)
 
-        if self.laser.cshape.overlaps(self.enemy_ship_two.cshape):
-            explosion.position = self.enemy_ship_two._get_position()
-            explosion.do(FadeOut(0.30))
-            self.laser.do(FadeOut(0.03))
-            self.add(explosion)
+        if self.ship.cshape.overlaps(self.enemy_ship_one.cshape) or self.ship.cshape.overlaps(self.enemy_ship_two.cshape):
+            self.ship.actions.clear()
         
 
 
